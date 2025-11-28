@@ -19,7 +19,7 @@
         <EditorContent :editor="editor" />
       </div>
 
-      <!-- 建议区域：只显示我们自己的英文补全 -->
+      <!-- 建议区域：显示 AI 下文预测 -->
       <div v-if="suggestions.length" class="suggestion-panel">
         <div class="suggestion-header">AI suggestions</div>
         <button
@@ -33,13 +33,18 @@
         </button>
       </div>
 
-        <!-- 句子重写区域 -->
-        <div v-if="rewrittenSentence" class="rewrite-panel">
-          <div class="rewrite-header">Rewritten Sentence</div>
-          <div class="rewrite-text">{{ rewrittenSentence }}</div>
-          <button @click="clearRewrittenSentence" class="clear-rewrite-btn">Clear</button>
+      <!-- 句子重写区域 -->
+      <div v-if="rewrittenData" class="rewrite-panel">
+        <div class="rewrite-header">Rewritten Sentence</div>
+        <div class="rewrite-text">{{ rewrittenData.rewritten }}</div>
+        <div v-if="rewrittenData.technique" class="rewrite-technique">
+          Technique: {{ rewrittenData.technique }}
         </div>
-
+        <div v-if="rewrittenData.explanation" class="rewrite-explain">
+          {{ rewrittenData.explanation }}
+        </div>
+        <button @click="clearRewrittenSentence" class="clear-rewrite-btn">Clear</button>
+      </div>
     </div>
   </div>
 </template>
@@ -50,52 +55,118 @@ import { Editor, EditorContent } from "@tiptap/vue-3";
 import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
 
-// --- WebSocket 部分（沿用你后端的接口） ---
-interface BackendSuggestion {
+// --- 接口定义 ---
+interface Suggestion {
   text: string;
   explain: string;
 }
 
-const ws = new WebSocket("ws://localhost:8000/ws/suggest");
+interface RewriteResponse {
+  rewritten: string;
+  technique?: string;
+  explanation?: string;
+}
 
-ws.onopen = () => {
-  console.log("[WS] Connected to backend.");
-};
-ws.onclose = () => {
-  console.log("[WS] Disconnected from backend.");
-};
-ws.onerror = (err) => {
-  console.error("[WS] Error:", err);
-};
-
-// --- TipTap Editor 实例 ---
+// --- 响应式状态 ---
 const editor = ref<Editor | null>(null);
+const suggestions = ref<Suggestion[]>([]);
+const rewrittenData = ref<RewriteResponse | null>(null);
+const isEmpty = computed(() => !editor.value || editor.value.isEmpty);
 
-// 当前建议列表
-const suggestions = ref<BackendSuggestion[]>([]);
-
-// 判断编辑器是否为空，用来控制 placeholder 样式
-const isEmpty = computed(() => {
-  return !editor.value || editor.value.isEmpty;
-});
-
-// 当前重写后的句子
-const rewrittenSentence = ref<string | null>(null);
-
-// 发送内容到后端（防抖触发）
+// --- 防抖请求控制 ---
 let typingTimer: number | undefined;
+let lastSentText = "";
 
+// 发送建议请求（防抖 + 去重）
+async function sendSuggestionRequest() {
+  if (!editor.value) return;
+
+  const text = editor.value.getText().trim();
+  if (text.length < 5 || text === lastSentText) {
+    suggestions.value = [];
+    return;
+  }
+
+  lastSentText = text;
+
+  try {
+    const response = await fetch("http://localhost:8000/suggest", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text, cursor: null }),
+    });
+
+    if (!response.ok) {
+      suggestions.value = [];
+      return;
+    }
+
+    const data = await response.json();
+    // 确保 suggestions 是数组，最多 3 项
+    suggestions.value = (data.suggestions || []).slice(0, 3);
+  } catch (error) {
+    console.error("Failed to fetch suggestions:", error);
+    suggestions.value = [];
+  }
+}
+
+// 处理编辑器更新（带防抖）
 function handleEditorUpdate() {
   if (typingTimer) {
     window.clearTimeout(typingTimer);
   }
-
-  typingTimer = window.setTimeout(() => {
-    sendSuggestionRequest();
-  }, 600); // 停顿 600ms 再发
+  typingTimer = window.setTimeout(sendSuggestionRequest, 600);
 }
 
-// 初始化编辑器
+// 应用建议到光标处
+function applySuggestion(text: string) {
+  if (!editor.value) return;
+  editor.value
+    .chain()
+    .focus()
+    .insertContent(text + " ")
+    .run();
+  suggestions.value = []; // 清空建议
+}
+
+// 句子重写功能
+function onTextSelect() {
+  const selectedText = window.getSelection()?.toString().trim();
+  if (selectedText && selectedText.length > 3) {
+    rewriteSentence(selectedText);
+  }
+}
+
+async function rewriteSentence(selectedText: string) {
+  try {
+    const response = await fetch("http://localhost:8000/rewrite", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ sentence: selectedText }),
+    });
+
+    if (!response.ok) {
+      rewrittenData.value = { rewritten: selectedText };
+      return;
+    }
+
+    const data = await response.json();
+    rewrittenData.value = {
+      rewritten: data.rewritten || selectedText,
+      technique: data.technique,
+      explanation: data.explanation,
+    };
+  } catch (error) {
+    console.error("Error rewriting sentence:", error);
+    rewrittenData.value = { rewritten: selectedText };
+  }
+}
+
+function clearRewrittenSentence() {
+  rewrittenData.value = null;
+}
+
+// --- 生命周期 ---
 onMounted(() => {
   editor.value = new Editor({
     extensions: [
@@ -108,103 +179,22 @@ onMounted(() => {
       }),
     ],
     content: "",
-    onUpdate: () => {
-      // 每次内容变化走到这里
-      handleEditorUpdate();
-    },
+    onUpdate: handleEditorUpdate,
   });
-
-  // WebSocket 收到建议
-  ws.onmessage = (event: MessageEvent) => {
-    console.log("[WS] Got message:", event.data);
-    try {
-      const data: BackendSuggestion[] = JSON.parse(event.data);
-      suggestions.value = data;
-    } catch (e) {
-      console.error("Failed to parse suggestions:", e);
-    }
-  };
 });
 
-// 把编辑器内容发给后端
-function sendSuggestionRequest() {
-  if (!editor.value) return;
-  if (ws.readyState !== WebSocket.OPEN) {
-    console.warn("[WS] Not open, skip suggestion request.");
-    return;
-  }
-
-  const text = editor.value.getText(); // 纯文本即可
-  console.log("[WS] sending text length:", text.length);
-
-  ws.send(
-    JSON.stringify({
-      text,
-      cursor: null, // TipTap 先不传光标信息，后面需要再加
-    })
-  );
-}
-
-// 点击某个建议时，把这个短语插入光标处
-function applySuggestion(text: string) {
-  if (!editor.value) return;
-
-  editor.value
-    .chain()
-    .focus()
-    .insertContent(text + " ")
-    .run();
-
-  // 用完建议可以清空，或者保留，看你产品设计
-  // suggestions.value = [];
-}
-
-// 监听文本选择（用户选中内容）
-function onTextSelect() {
-  const selectedText = window.getSelection()?.toString();
-  if (selectedText) {
-    rewriteSentence(selectedText);
-  }
-}
-
-function rewriteSentence(selectedText: string) {
-  fetch("http://localhost:8000/rewrite", {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      sentence: selectedText,
-    }),
-  })
-    .then((response) => response.json())
-    .then((data) => {
-      console.log(data); // 查看返回的数据，确保数据正确
-      rewrittenSentence.value = data.rewritten; // 确保这个字段是你想显示的
-    })
-    .catch((error) => {
-      console.error("Error rewriting sentence:", error);
-    });
-}
-
-
-// 清空重写句子
-function clearRewrittenSentence() {
-  rewrittenSentence.value = null;
-}
-
-// 销毁时释放资源
 onBeforeUnmount(() => {
   if (editor.value) {
     editor.value.destroy();
   }
-  if (ws.readyState === WebSocket.OPEN) {
-    ws.close();
+  if (typingTimer) {
+    window.clearTimeout(typingTimer);
   }
 });
 </script>
 
 <style scoped>
+/* 保留你原有的所有样式，仅增加 rewrite-technique 和 rewrite-explain */
 .editor-container {
   height: 100%;
   width: 100%;
@@ -221,7 +211,6 @@ onBeforeUnmount(() => {
   overflow: hidden;
 }
 
-/* 顶部小条，类似一个文稿窗口 */
 .editor-header {
   display: flex;
   align-items: center;
@@ -244,7 +233,6 @@ onBeforeUnmount(() => {
   color: #6b7280;
 }
 
-/* 编辑内容区域 */
 .editor-content {
   flex: 1;
   padding: 16px 20px 8px 20px;
@@ -259,7 +247,6 @@ onBeforeUnmount(() => {
   color: #9ca3af;
 }
 
-/* TipTap 基础样式 */
 .editor-content :deep(p) {
   margin: 0 0 8px;
   line-height: 1.6;
@@ -274,7 +261,6 @@ onBeforeUnmount(() => {
   font-style: italic;
 }
 
-/* 建议面板 */
 .suggestion-panel {
   border-top: 1px solid #e5e7eb;
   padding: 8px 10px;
@@ -308,6 +294,7 @@ onBeforeUnmount(() => {
 .suggestion-text {
   font-size: 14px;
   color: #111827;
+  font-weight: 500;
 }
 
 .suggestion-explain {
@@ -316,7 +303,6 @@ onBeforeUnmount(() => {
   margin-top: 2px;
 }
 
-/* 重写句子面板 */
 .rewrite-panel {
   border-top: 1px solid #e5e7eb;
   padding: 8px 10px;
@@ -332,6 +318,20 @@ onBeforeUnmount(() => {
 .rewrite-text {
   font-size: 14px;
   color: #111827;
+  margin-bottom: 6px;
+}
+
+.rewrite-technique {
+  font-size: 12px;
+  color: #4f46e5;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.rewrite-explain {
+  font-size: 12px;
+  color: #6b7280;
+  line-height: 1.4;
 }
 
 .clear-rewrite-btn {
@@ -342,6 +342,7 @@ onBeforeUnmount(() => {
   color: white;
   cursor: pointer;
   margin-top: 8px;
+  font-size: 12px;
 }
 
 .clear-rewrite-btn:hover {
