@@ -1,8 +1,8 @@
 <template>
   <div class="editor-container">
-    <!-- 编辑器外壳 -->
+    <!-- Editor shell -->
     <div class="editor-shell">
-      <!-- 顶部小标签 -->
+      <!-- Header with title and Analyze button -->
       <div class="editor-header">
         <div class="header-left">
           <span class="dot"></span>
@@ -43,7 +43,7 @@
           </div>
       </div>
 
-      <!-- 真正的 TipTap 编辑区域 -->
+      <!-- Main TipTap editor area -->
       <div
         class="editor-content"
         :class="{ 'editor-content--empty': isEmpty }"
@@ -52,7 +52,7 @@
         <EditorContent :editor="editor" />
       </div>
 
-      <!-- 建议区域：显示 AI 下文预测 -->
+      <!-- Suggestion area: AI next-phrase suggestions -->
       <div v-if="suggestions.length" class="suggestion-panel">
         <div class="suggestion-header">
           <span>AI suggestions</span>
@@ -69,7 +69,7 @@
         </button>
       </div>
 
-      <!-- 句子重写区域 -->
+      <!-- Sentence rewrite area -->
       <div v-if="rewrittenData" class="rewrite-panel">
         <div class="rewrite-header">Rewritten Sentence</div>
         <div class="rewrite-text">{{ rewrittenData.rewritten }}</div>
@@ -82,15 +82,17 @@
         <button @click="clearRewrittenSentence" class="clear-rewrite-btn">Clear</button>
       </div>
 
-      <!-- 逻辑分析区域 -->
+      <!-- Logic analysis area -->
       <div v-if="logicAnalysis" class="logic-panel">
         <div class="logic-header">Logic Analysis</div>
+
         <div v-if="logicAnalysis.overall_score !== undefined" class="logic-score-section">
           <div class="logic-score-label">Score</div>
           <div class="logic-score-value" :class="getScoreClass(logicAnalysis.overall_score)">
             {{ logicAnalysis.overall_score }}
           </div>
         </div>
+
         <div v-if="logicAnalysis.issues && logicAnalysis.issues.length > 0" class="logic-issues">
           <div 
             v-for="(issue, idx) in logicAnalysis.issues" 
@@ -101,7 +103,60 @@
             <div class="logic-issue-desc">{{ issue.description }}</div>
           </div>
         </div>
-        <div v-if="logicAnalysis.summary" class="logic-summary">{{ logicAnalysis.summary }}</div>
+
+        <div v-if="logicAnalysis.summary" class="logic-summary">
+          {{ logicAnalysis.summary }}
+        </div>
+
+        <!-- Manually trigger personalized practice task generation -->
+        <button class="generate-task-btn" @click="generatePracticeTasks">
+          🎯 Generate Practice Tasks
+        </button>
+
+        <!-- Personalized practice tasks (only shown after user clicks the button) -->
+        <div v-if="practiceTasks.length" class="logic-tasks">
+          <div class="logic-tasks-header">Personalized Practice Tasks</div>
+
+          <!-- Task list selector -->
+          <div class="logic-task-list">
+            <button
+              v-for="(task, idx) in practiceTasks"
+              :key="'task-tab-' + idx"
+              class="logic-task-tab"
+              :class="{ 'logic-task-tab--active': idx === activeTaskIndex }"
+              @click="activeTaskIndex = idx"
+            >
+              {{ idx + 1 }}. {{ task.title }}
+            </button>
+          </div>
+
+          <!-- Active task detail and inline practice area -->
+          <div v-if="activeTask" class="logic-task-item">
+            <div class="logic-task-title">
+              {{ activeTask.title }}
+              <span class="logic-task-tag">{{ activeTask.dimension }}</span>
+            </div>
+            <div class="logic-task-target">
+              Target: {{ activeTask.target_issue }}
+            </div>
+            <div class="logic-task-exercise">
+              {{ activeTask.exercise }}
+            </div>
+            <div v-if="activeTask.example" class="logic-task-example">
+              Example: {{ activeTask.example }}
+            </div>
+
+            <div class="logic-task-workspace">
+              <div class="logic-task-workspace-label">Your practice for this task</div>
+              <textarea
+                v-model="taskDraft"
+                class="logic-task-textarea"
+                placeholder="Write 3–5 sentences here to complete this task..."
+              ></textarea>
+            </div>
+          </div>
+        </div>
+
         <button @click="clearLogicAnalysis" class="clear-logic-btn">Clear</button>
       </div>
     </div>
@@ -130,7 +185,7 @@ import Placeholder from "@tiptap/extension-placeholder";
 import { useFaceLandmarks } from '../composables/useFaceLandmarks';
 import { useActivityMonitor } from '../composables/useActivityMonitor';
 
-// 绑定模板中的 <video ref="videoRef">
+// Bind <video ref="videoRef"> in template
 const { 
   startCamera, 
   stopCamera, 
@@ -145,7 +200,7 @@ const {
 
 const videoRef = ref<HTMLVideoElement | null>(null);
 
-// 2. 引入行为检测
+// Activity / focus monitoring
 const { isTabHidden, isIdle } = useActivityMonitor();
 const focusStatus = computed(() => {
   if (isTabHidden.value) return 'Distracted (Tab Hidden)';
@@ -169,7 +224,7 @@ const focusStatusColor = computed(() => {
 });
 
 
-// 控制开关
+// Camera toggle control
 const toggleMonitoring = () => {
     if (isCameraOpen.value) {
         stopCamera();
@@ -199,26 +254,58 @@ interface LogicIssue {
   severity: "high" | "medium" | "low";
 }
 
+interface WritingProfile {
+  logic_level?: string;
+  logic_weak_points?: string[];
+  vocabulary_level?: string;
+  vocabulary_weak_points?: string[];
+  grammar_level?: string;
+  grammar_weak_points?: string[];
+  structure_level?: string;
+  structure_weak_points?: string[];
+}
+
+interface PracticeTask {
+  title: string;
+  dimension: "logic" | "vocabulary" | "grammar" | "structure" | string;
+  target_issue: string;
+  exercise: string;
+  example: string;
+}
+
 interface LogicAnalysisResponse {
   overall_score?: number;
   issues?: LogicIssue[];
   summary?: string;
   error?: string;
+  profile?: WritingProfile;
 }
 
-// --- 响应式状态 ---
+// --- Reactive state ---
 const editor = ref<Editor | null>(null);
 const suggestions = ref<Suggestion[]>([]);
 const rewrittenData = ref<RewriteResponse | null>(null);
 const logicAnalysis = ref<LogicAnalysisResponse | null>(null);
+const practiceTasks = ref<PracticeTask[]>([]);
+const activeTaskIndex = ref(0);
+const taskDraft = ref("");
+
+const activeTask = computed(() => {
+  if (!practiceTasks.value.length) return null;
+  const idx = Math.min(
+    Math.max(activeTaskIndex.value, 0),
+    practiceTasks.value.length - 1
+  );
+  return practiceTasks.value[idx];
+});
 const isAnalyzing = ref(false);
 const isEmpty = computed(() => !editor.value || editor.value.isEmpty);
 
-// --- 防抖请求控制 ---
+// --- Debounce control for suggestion requests ---
 let typingTimer: number | undefined;
 let lastSentText = "";
 
-// 发送建议请求（防抖 + 去重）
+// Send suggestion request (debounced + avoid duplicates)
 async function sendSuggestionRequest() {
   if (!editor.value) return;
 
@@ -250,7 +337,7 @@ async function sendSuggestionRequest() {
   }
 }
 
-// 处理编辑器更新（带防抖）
+// Handle editor update with debounce
 function handleEditorUpdate() {
   if (typingTimer) {
     window.clearTimeout(typingTimer);
@@ -258,7 +345,7 @@ function handleEditorUpdate() {
   typingTimer = window.setTimeout(sendSuggestionRequest, 600);
 }
 
-// 应用建议到光标处
+// Apply suggestion at cursor
 function applySuggestion(text: string) {
   if (!editor.value) return;
   editor.value
@@ -273,7 +360,7 @@ function clearSuggestions() {
   suggestions.value = [];
 }
 
-// 句子重写功能
+// Sentence rewrite feature
 function onTextSelect() {
   const selectedText = window.getSelection()?.toString().trim();
   if (selectedText && selectedText.length > 3) {
@@ -310,7 +397,7 @@ function clearRewrittenSentence() {
   rewrittenData.value = null;
 }
 
-// 逻辑分析功能
+// Logic analysis feature
 async function analyzeLogic() {
   if (!editor.value || isEmpty.value) return;
   
@@ -322,6 +409,7 @@ async function analyzeLogic() {
 
   isAnalyzing.value = true;
   logicAnalysis.value = null;
+  practiceTasks.value = [];
 
   try {
     const response = await fetch("http://localhost:8000/analyze-logic", {
@@ -347,6 +435,37 @@ async function analyzeLogic() {
   }
 }
 
+// Manually generate practice tasks based on current profile and (optional) latest article
+async function generatePracticeTasks() {
+  if (!editor.value) return;
+  const text = editor.value.getText().trim();
+
+  try {
+    const response = await fetch("http://localhost:8000/generate-tasks", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text }),
+    });
+
+    if (!response.ok) {
+      throw new Error("Task generation request failed");
+    }
+
+    const data = await response.json();
+    practiceTasks.value = (data.tasks || []).slice(0, 3);
+    // Select first task by default for inline practice
+    if (practiceTasks.value.length > 0) {
+      activeTaskIndex.value = 0;
+      taskDraft.value = "";
+    }
+  } catch (error) {
+    console.error("Error generating practice tasks:", error);
+    practiceTasks.value = [];
+    activeTaskIndex.value = 0;
+    taskDraft.value = "";
+  }
+}
+
 function clearLogicAnalysis() {
   logicAnalysis.value = null;
 }
@@ -357,7 +476,7 @@ function getScoreClass(score: number): string {
   return "score-low";
 }
 
-// --- 生命周期 ---
+// --- Lifecycle ---
 onMounted(() => {
   editor.value = new Editor({
     extensions: [
@@ -596,6 +715,9 @@ onBeforeUnmount(() => {
   border-top: 1px solid #e5e7eb;
   padding: 8px 10px;
   background: #f9fafb;
+  /* Make logic analysis panel scrollable and occupy more vertical space */
+  max-height: 480px;
+  overflow-y: auto;
 }
 
 .logic-header {
@@ -673,6 +795,157 @@ onBeforeUnmount(() => {
   padding: 10px 12px;
   background: #ffffff;
   border-radius: 8px;
+}
+
+.generate-task-btn {
+  padding: 6px 12px;
+  border-radius: 4px;
+  border: none;
+  background: #0f766e;
+  color: white;
+  cursor: pointer;
+  font-size: 12px;
+  margin-bottom: 6px;
+}
+
+.generate-task-btn:hover {
+  background: #115e59;
+}
+
+.logic-task-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+
+.logic-task-tab {
+  padding: 4px 8px;
+  border-radius: 999px;
+  border: 1px solid #d1d5db;
+  background: #ffffff;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.logic-task-tab--active {
+  background: #0f766e;
+  color: #ffffff;
+  border-color: #0f766e;
+}
+
+.logic-profile {
+  margin-top: 8px;
+  padding: 10px 12px;
+  background: #f3f4ff;
+  border-radius: 8px;
+}
+
+.logic-profile-header {
+  font-size: 12px;
+  font-weight: 600;
+  color: #4f46e5;
+  margin-bottom: 6px;
+}
+
+.logic-profile-section {
+  margin-bottom: 6px;
+}
+
+.logic-profile-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #111827;
+  margin-bottom: 2px;
+}
+
+.logic-profile-text {
+  font-size: 12px;
+  color: #4b5563;
+}
+
+.logic-profile-list {
+  margin: 2px 0 0;
+  padding-left: 16px;
+  font-size: 12px;
+  color: #4b5563;
+}
+
+.logic-tasks {
+  margin-top: 10px;
+}
+
+.logic-tasks-header {
+  font-size: 12px;
+  font-weight: 600;
+  color: #0f766e;
+  margin-bottom: 6px;
+}
+
+.logic-task-item {
+  padding: 8px 10px;
+  background: #ecfeff;
+  border-radius: 8px;
+  margin-bottom: 6px;
+  border-left: 3px solid #0f766e;
+}
+
+.logic-task-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #0f172a;
+  margin-bottom: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.logic-task-tag {
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.logic-task-target {
+  font-size: 12px;
+  color: #4b5563;
+  margin-bottom: 2px;
+}
+
+.logic-task-exercise {
+  font-size: 12px;
+  color: #111827;
+  margin-bottom: 2px;
+}
+
+.logic-task-example {
+  font-size: 12px;
+  color: #6b7280;
+  font-style: italic;
+}
+
+.logic-task-workspace {
+  margin-top: 8px;
+}
+
+.logic-task-workspace-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: #111827;
+  margin-bottom: 4px;
+}
+
+.logic-task-textarea {
+  width: 100%;
+  min-height: 80px;
+  border-radius: 6px;
+  border: 1px solid #d1d5db;
+  padding: 6px 8px;
+  font-size: 13px;
+  font-family: inherit;
+  resize: vertical;
 }
 
 .clear-logic-btn {
