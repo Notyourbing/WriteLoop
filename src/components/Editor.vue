@@ -19,6 +19,29 @@
           <span v-else>Analyzing...</span>
         </button>
       </div>
+      <video 
+        ref="videoRef" 
+        autoplay 
+        playsinline 
+        muted
+        style="position: absolute; opacity: 0; pointer-events: none; width: 1px; height: 1px;"
+      ></video>
+
+      <div class="focus-status-bar" :class="{ 'status-warning': focusStatus !== 'Focused' }">
+          <div class="status-left">
+              <span class="status-dot" :class="focusStatusColor"></span>
+              <span class="status-text">Status: {{ focusStatus }}</span>
+          </div>
+          
+          <div class="status-right">
+            <button @click="toggleFocusMode" class="toggle-btn">
+                {{ isCameraOpen ? 'Stop Focus Cam' : 'Start Focus Cam' }}
+            </button>
+            <span v-if="isCameraOpen" class="debug-info">
+                EAR: {{ ear.toFixed(2) }} | MAR: {{ mar.toFixed(2) }}
+            </span>
+          </div>
+      </div>
 
       <!-- 真正的 TipTap 编辑区域 -->
       <div
@@ -104,14 +127,13 @@ import { Editor, EditorContent } from "@tiptap/vue-3";
 import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
 
-// --- 1. 引入专注度检测模块 (修复点：新增引入) ---
 import { useFaceLandmarks } from '../composables/useFaceLandmarks';
-// import { useActivityMonitor } from '../composables/useActivityMonitor'; // 暂时先注释掉，分步调试
+import { useActivityMonitor } from '../composables/useActivityMonitor';
 
-// --- 2. 初始化视觉检测 Hook (修复点：新增解构) ---
+// 绑定模板中的 <video ref="videoRef">
 const { 
   startCamera, 
-  stopCamera, // 记得导出停止方法
+  stopCamera, 
   ear, 
   mar, 
   isDrowsy, 
@@ -120,8 +142,32 @@ const {
   isCameraOpen 
 } = useFaceLandmarks();
 
-// 绑定模板中的 <video ref="videoRef">
+
 const videoRef = ref<HTMLVideoElement | null>(null);
+
+// 2. 引入行为检测
+const { isTabHidden, isIdle } = useActivityMonitor();
+const focusStatus = computed(() => {
+  if (isTabHidden.value) return 'Distracted (Tab Hidden)';
+  if (isIdle.value) return 'Idle (No Activity)';
+  
+  if (isCameraOpen.value) {
+    if (isDrowsy.value) return 'Fatigued (Drowsy)';
+    if (isYawning.value) return 'Fatigued (Yawning)';
+  }
+  
+  return 'Focused';
+});
+// 计算状态颜色
+const focusStatusColor = computed(() => {
+  switch (focusStatus.value) {
+    case 'Focused': return 'bg-green-500'; // 需要对应的 CSS 类
+    case 'Fatigued (Drowsy)': 
+    case 'Fatigued (Yawning)': return 'bg-red-500';
+    default: return 'bg-yellow-500';
+  }
+});
+
 
 // 控制开关
 const toggleMonitoring = () => {
@@ -134,9 +180,7 @@ const toggleMonitoring = () => {
     }
 };
 
-// --- 下面是你原有的编辑器逻辑，保持不变 ---
 
-// --- 接口定义 ---
 interface Suggestion {
   text: string;
   explain: string;
@@ -327,7 +371,7 @@ onMounted(() => {
     ],
     content: "",
     onUpdate: handleEditorUpdate,
-  });
+  }); // ✅ 去掉 as Editor 类型断言
 });
 
 onBeforeUnmount(() => {
@@ -343,7 +387,6 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
-/* 保留你原有的所有样式，仅增加 rewrite-technique 和 rewrite-explain */
 .editor-container {
   height: 100%;
   width: 100%;
@@ -646,4 +689,57 @@ onBeforeUnmount(() => {
 .clear-logic-btn:hover {
   background: #45a049;
 }
+
+.focus-status-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 16px;
+  background: #f0fdf4; /* 浅绿色背景 */
+  border-bottom: 1px solid #dcfce7;
+  font-size: 13px;
+  color: #166534;
+  transition: background 0.3s;
+}
+
+.focus-status-bar.status-warning {
+  background: #fef2f2; /* 浅红色警告 */
+  color: #991b1b;
+  border-bottom-color: #fee2e2;
+}
+
+.status-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: #22c55e; /* 默认绿 */
+}
+
+/* 动态类名对应的颜色 */
+.bg-green-500 { background-color: #22c55e; }
+.bg-yellow-500 { background-color: #eab308; }
+.bg-red-500 { background-color: #ef4444; }
+
+.toggle-btn {
+  background: white;
+  border: 1px solid #d1d5db;
+  padding: 4px 8px;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 11px;
+}
+
+.debug-info {
+  margin-left: 10px;
+  font-family: monospace;
+  opacity: 0.7;
+  font-size: 11px;
+}
+
 </style>
