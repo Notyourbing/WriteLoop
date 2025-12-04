@@ -1,5 +1,6 @@
 import { createApp } from "vue";
 import App from "./App.vue";
+import router from "./router";
 
 import editorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker";
 import jsonWorker from "monaco-editor/esm/vs/language/json/json.worker?worker";
@@ -20,4 +21,4 @@ self.MonacoEnvironment = {
     },
 };
 
-createApp(App).mount("#app");
+createApp(App).use(router).mount("#app");

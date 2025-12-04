@@ -9,7 +9,12 @@
 
     <main class="app-main">
       <div class="editor-wrapper">
-        <Editor />
+        <router-view v-slot="{ Component, route }">
+          <keep-alive v-if="route.name === 'Editor'">
+            <component :is="Component" />
+          </keep-alive>
+          <component v-else :is="Component" />
+        </router-view>
       </div>
     </main>
     
@@ -17,7 +22,6 @@
 </template>
 
 <script setup lang="ts">
-import Editor from "./components/Editor.vue";
 </script>
 
 <style scoped>

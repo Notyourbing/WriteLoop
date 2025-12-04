@@ -1,8 +1,8 @@
 <template>
   <div class="editor-container">
-    <!-- 编辑器外壳 -->
+    <!-- Editor shell -->
     <div class="editor-shell">
-      <!-- 顶部小标签 -->
+      <!-- Header with title and Analyze button -->
       <div class="editor-header">
         <div class="header-left">
           <span class="dot"></span>
@@ -43,7 +43,7 @@
           </div>
       </div>
 
-      <!-- 真正的 TipTap 编辑区域 -->
+      <!-- Main TipTap editor area -->
       <div
         class="editor-content"
         :class="{ 'editor-content--empty': isEmpty }"
@@ -52,8 +52,8 @@
         <EditorContent :editor="editor" />
       </div>
 
-      <!-- 建议区域：显示 AI 下文预测 -->
-      <div v-if="suggestions.length" class="suggestion-panel">
+      <!-- Suggestion area: AI next-phrase suggestions -->
+      <div v-if="suggestions.length && !logicAnalysis" class="suggestion-panel">
         <div class="suggestion-header">
           <span>AI suggestions</span>
           <button @click="clearSuggestions" class="close-suggestion-btn">×</button>
@@ -69,8 +69,8 @@
         </button>
       </div>
 
-      <!-- 句子重写区域 -->
-      <div v-if="rewrittenData" class="rewrite-panel">
+      <!-- Sentence rewrite area -->
+      <div v-if="rewrittenData && !logicAnalysis" class="rewrite-panel">
         <div class="rewrite-header">Rewritten Sentence</div>
         <div class="rewrite-text">{{ rewrittenData.rewritten }}</div>
         <div v-if="rewrittenData.technique" class="rewrite-technique">
@@ -82,15 +82,17 @@
         <button @click="clearRewrittenSentence" class="clear-rewrite-btn">Clear</button>
       </div>
 
-      <!-- 逻辑分析区域 -->
+      <!-- Logic analysis area -->
       <div v-if="logicAnalysis" class="logic-panel">
         <div class="logic-header">Logic Analysis</div>
+
         <div v-if="logicAnalysis.overall_score !== undefined" class="logic-score-section">
           <div class="logic-score-label">Score</div>
           <div class="logic-score-value" :class="getScoreClass(logicAnalysis.overall_score)">
             {{ logicAnalysis.overall_score }}
           </div>
         </div>
+
         <div v-if="logicAnalysis.issues && logicAnalysis.issues.length > 0" class="logic-issues">
           <div 
             v-for="(issue, idx) in logicAnalysis.issues" 
@@ -101,7 +103,16 @@
             <div class="logic-issue-desc">{{ issue.description }}</div>
           </div>
         </div>
-        <div v-if="logicAnalysis.summary" class="logic-summary">{{ logicAnalysis.summary }}</div>
+
+        <div v-if="logicAnalysis.summary" class="logic-summary">
+          {{ logicAnalysis.summary }}
+        </div>
+
+        <!-- Manually trigger personalized practice task generation -->
+        <button class="generate-task-btn" @click="generatePracticeTasks">
+          🎯 Generate Practice Tasks
+        </button>
+
         <button @click="clearLogicAnalysis" class="clear-logic-btn">Clear</button>
       </div>
     </div>
@@ -126,11 +137,17 @@ import { onBeforeUnmount, onMounted, ref, computed } from "vue";
 import { Editor, EditorContent } from "@tiptap/vue-3";
 import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
+import { useRouter } from "vue-router";
 
 import { useFaceLandmarks } from '../composables/useFaceLandmarks';
 import { useActivityMonitor } from '../composables/useActivityMonitor';
 
-// 绑定模板中的 <video ref="videoRef">
+// 定义组件名称，用于 keep-alive
+defineOptions({
+  name: 'Editor'
+});
+
+// Bind <video ref="videoRef"> in template
 const { 
   startCamera, 
   stopCamera, 
@@ -144,8 +161,9 @@ const {
 
 
 const videoRef = ref<HTMLVideoElement | null>(null);
+const router = useRouter();
 
-// 2. 引入行为检测
+// Activity / focus monitoring
 const { isTabHidden, isIdle } = useActivityMonitor();
 const focusStatus = computed(() => {
   if (isTabHidden.value) return 'Distracted (Tab Hidden)';
@@ -169,7 +187,7 @@ const focusStatusColor = computed(() => {
 });
 
 
-// 控制开关
+// Camera toggle control
 const toggleMonitoring = () => {
     if (isCameraOpen.value) {
         stopCamera();
@@ -199,14 +217,26 @@ interface LogicIssue {
   severity: "high" | "medium" | "low";
 }
 
+interface WritingProfile {
+  logic_level?: string;
+  logic_weak_points?: string[];
+  vocabulary_level?: string;
+  vocabulary_weak_points?: string[];
+  grammar_level?: string;
+  grammar_weak_points?: string[];
+  structure_level?: string;
+  structure_weak_points?: string[];
+}
+
 interface LogicAnalysisResponse {
   overall_score?: number;
   issues?: LogicIssue[];
   summary?: string;
   error?: string;
+  profile?: WritingProfile;
 }
 
-// --- 响应式状态 ---
+// --- Reactive state ---
 const editor = ref<Editor | null>(null);
 const suggestions = ref<Suggestion[]>([]);
 const rewrittenData = ref<RewriteResponse | null>(null);
@@ -214,11 +244,11 @@ const logicAnalysis = ref<LogicAnalysisResponse | null>(null);
 const isAnalyzing = ref(false);
 const isEmpty = computed(() => !editor.value || editor.value.isEmpty);
 
-// --- 防抖请求控制 ---
+// --- Debounce control for suggestion requests ---
 let typingTimer: number | undefined;
 let lastSentText = "";
 
-// 发送建议请求（防抖 + 去重）
+// Send suggestion request (debounced + avoid duplicates)
 async function sendSuggestionRequest() {
   if (!editor.value) return;
 
@@ -250,7 +280,7 @@ async function sendSuggestionRequest() {
   }
 }
 
-// 处理编辑器更新（带防抖）
+// Handle editor update with debounce
 function handleEditorUpdate() {
   if (typingTimer) {
     window.clearTimeout(typingTimer);
@@ -258,7 +288,7 @@ function handleEditorUpdate() {
   typingTimer = window.setTimeout(sendSuggestionRequest, 600);
 }
 
-// 应用建议到光标处
+// Apply suggestion at cursor
 function applySuggestion(text: string) {
   if (!editor.value) return;
   editor.value
@@ -273,7 +303,7 @@ function clearSuggestions() {
   suggestions.value = [];
 }
 
-// 句子重写功能
+// Sentence rewrite feature
 function onTextSelect() {
   const selectedText = window.getSelection()?.toString().trim();
   if (selectedText && selectedText.length > 3) {
@@ -310,7 +340,7 @@ function clearRewrittenSentence() {
   rewrittenData.value = null;
 }
 
-// 逻辑分析功能
+// Logic analysis feature
 async function analyzeLogic() {
   if (!editor.value || isEmpty.value) return;
   
@@ -347,6 +377,18 @@ async function analyzeLogic() {
   }
 }
 
+// Manually generate practice tasks based on current profile and (optional) latest article
+async function generatePracticeTasks() {
+  if (!editor.value) return;
+  const text = editor.value.getText().trim();
+
+  // 跳转到新路由，传递文本参数
+  router.push({
+    path: '/generate-tasks',
+    query: { text: text }
+  });
+}
+
 function clearLogicAnalysis() {
   logicAnalysis.value = null;
 }
@@ -357,7 +399,7 @@ function getScoreClass(score: number): string {
   return "score-low";
 }
 
-// --- 生命周期 ---
+// --- Lifecycle ---
 onMounted(() => {
   editor.value = new Editor({
     extensions: [
@@ -596,6 +638,9 @@ onBeforeUnmount(() => {
   border-top: 1px solid #e5e7eb;
   padding: 8px 10px;
   background: #f9fafb;
+  /* Make logic analysis panel scrollable and occupy more vertical space */
+  max-height: 480px;
+  overflow-y: auto;
 }
 
 .logic-header {
@@ -673,6 +718,21 @@ onBeforeUnmount(() => {
   padding: 10px 12px;
   background: #ffffff;
   border-radius: 8px;
+}
+
+.generate-task-btn {
+  padding: 6px 12px;
+  border-radius: 4px;
+  border: none;
+  background: #0f766e;
+  color: white;
+  cursor: pointer;
+  font-size: 12px;
+  margin-bottom: 6px;
+}
+
+.generate-task-btn:hover {
+  background: #115e59;
 }
 
 .clear-logic-btn {
