@@ -53,7 +53,7 @@
       </div>
 
       <!-- Suggestion area: AI next-phrase suggestions -->
-      <div v-if="suggestions.length" class="suggestion-panel">
+      <div v-if="suggestions.length && !logicAnalysis" class="suggestion-panel">
         <div class="suggestion-header">
           <span>AI suggestions</span>
           <button @click="clearSuggestions" class="close-suggestion-btn">×</button>
@@ -70,7 +70,7 @@
       </div>
 
       <!-- Sentence rewrite area -->
-      <div v-if="rewrittenData" class="rewrite-panel">
+      <div v-if="rewrittenData && !logicAnalysis" class="rewrite-panel">
         <div class="rewrite-header">Rewritten Sentence</div>
         <div class="rewrite-text">{{ rewrittenData.rewritten }}</div>
         <div v-if="rewrittenData.technique" class="rewrite-technique">
@@ -113,50 +113,6 @@
           🎯 Generate Practice Tasks
         </button>
 
-        <!-- Personalized practice tasks (only shown after user clicks the button) -->
-        <div v-if="practiceTasks.length" class="logic-tasks">
-          <div class="logic-tasks-header">Personalized Practice Tasks</div>
-
-          <!-- Task list selector -->
-          <div class="logic-task-list">
-            <button
-              v-for="(task, idx) in practiceTasks"
-              :key="'task-tab-' + idx"
-              class="logic-task-tab"
-              :class="{ 'logic-task-tab--active': idx === activeTaskIndex }"
-              @click="activeTaskIndex = idx"
-            >
-              {{ idx + 1 }}. {{ task.title }}
-            </button>
-          </div>
-
-          <!-- Active task detail and inline practice area -->
-          <div v-if="activeTask" class="logic-task-item">
-            <div class="logic-task-title">
-              {{ activeTask.title }}
-              <span class="logic-task-tag">{{ activeTask.dimension }}</span>
-            </div>
-            <div class="logic-task-target">
-              Target: {{ activeTask.target_issue }}
-            </div>
-            <div class="logic-task-exercise">
-              {{ activeTask.exercise }}
-            </div>
-            <div v-if="activeTask.example" class="logic-task-example">
-              Example: {{ activeTask.example }}
-            </div>
-
-            <div class="logic-task-workspace">
-              <div class="logic-task-workspace-label">Your practice for this task</div>
-              <textarea
-                v-model="taskDraft"
-                class="logic-task-textarea"
-                placeholder="Write 3–5 sentences here to complete this task..."
-              ></textarea>
-            </div>
-          </div>
-        </div>
-
         <button @click="clearLogicAnalysis" class="clear-logic-btn">Clear</button>
       </div>
     </div>
@@ -181,9 +137,15 @@ import { onBeforeUnmount, onMounted, ref, computed } from "vue";
 import { Editor, EditorContent } from "@tiptap/vue-3";
 import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
+import { useRouter } from "vue-router";
 
 import { useFaceLandmarks } from '../composables/useFaceLandmarks';
 import { useActivityMonitor } from '../composables/useActivityMonitor';
+
+// 定义组件名称，用于 keep-alive
+defineOptions({
+  name: 'Editor'
+});
 
 // Bind <video ref="videoRef"> in template
 const { 
@@ -199,6 +161,7 @@ const {
 
 
 const videoRef = ref<HTMLVideoElement | null>(null);
+const router = useRouter();
 
 // Activity / focus monitoring
 const { isTabHidden, isIdle } = useActivityMonitor();
@@ -265,14 +228,6 @@ interface WritingProfile {
   structure_weak_points?: string[];
 }
 
-interface PracticeTask {
-  title: string;
-  dimension: "logic" | "vocabulary" | "grammar" | "structure" | string;
-  target_issue: string;
-  exercise: string;
-  example: string;
-}
-
 interface LogicAnalysisResponse {
   overall_score?: number;
   issues?: LogicIssue[];
@@ -286,18 +241,6 @@ const editor = ref<Editor | null>(null);
 const suggestions = ref<Suggestion[]>([]);
 const rewrittenData = ref<RewriteResponse | null>(null);
 const logicAnalysis = ref<LogicAnalysisResponse | null>(null);
-const practiceTasks = ref<PracticeTask[]>([]);
-const activeTaskIndex = ref(0);
-const taskDraft = ref("");
-
-const activeTask = computed(() => {
-  if (!practiceTasks.value.length) return null;
-  const idx = Math.min(
-    Math.max(activeTaskIndex.value, 0),
-    practiceTasks.value.length - 1
-  );
-  return practiceTasks.value[idx];
-});
 const isAnalyzing = ref(false);
 const isEmpty = computed(() => !editor.value || editor.value.isEmpty);
 
@@ -409,7 +352,6 @@ async function analyzeLogic() {
 
   isAnalyzing.value = true;
   logicAnalysis.value = null;
-  practiceTasks.value = [];
 
   try {
     const response = await fetch("http://localhost:8000/analyze-logic", {
@@ -440,30 +382,11 @@ async function generatePracticeTasks() {
   if (!editor.value) return;
   const text = editor.value.getText().trim();
 
-  try {
-    const response = await fetch("http://localhost:8000/generate-tasks", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text }),
-    });
-
-    if (!response.ok) {
-      throw new Error("Task generation request failed");
-    }
-
-    const data = await response.json();
-    practiceTasks.value = (data.tasks || []).slice(0, 3);
-    // Select first task by default for inline practice
-    if (practiceTasks.value.length > 0) {
-      activeTaskIndex.value = 0;
-      taskDraft.value = "";
-    }
-  } catch (error) {
-    console.error("Error generating practice tasks:", error);
-    practiceTasks.value = [];
-    activeTaskIndex.value = 0;
-    taskDraft.value = "";
-  }
+  // 跳转到新路由，传递文本参数
+  router.push({
+    path: '/generate-tasks',
+    query: { text: text }
+  });
 }
 
 function clearLogicAnalysis() {
@@ -810,142 +733,6 @@ onBeforeUnmount(() => {
 
 .generate-task-btn:hover {
   background: #115e59;
-}
-
-.logic-task-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  margin-bottom: 6px;
-}
-
-.logic-task-tab {
-  padding: 4px 8px;
-  border-radius: 999px;
-  border: 1px solid #d1d5db;
-  background: #ffffff;
-  font-size: 11px;
-  cursor: pointer;
-}
-
-.logic-task-tab--active {
-  background: #0f766e;
-  color: #ffffff;
-  border-color: #0f766e;
-}
-
-.logic-profile {
-  margin-top: 8px;
-  padding: 10px 12px;
-  background: #f3f4ff;
-  border-radius: 8px;
-}
-
-.logic-profile-header {
-  font-size: 12px;
-  font-weight: 600;
-  color: #4f46e5;
-  margin-bottom: 6px;
-}
-
-.logic-profile-section {
-  margin-bottom: 6px;
-}
-
-.logic-profile-title {
-  font-size: 12px;
-  font-weight: 600;
-  color: #111827;
-  margin-bottom: 2px;
-}
-
-.logic-profile-text {
-  font-size: 12px;
-  color: #4b5563;
-}
-
-.logic-profile-list {
-  margin: 2px 0 0;
-  padding-left: 16px;
-  font-size: 12px;
-  color: #4b5563;
-}
-
-.logic-tasks {
-  margin-top: 10px;
-}
-
-.logic-tasks-header {
-  font-size: 12px;
-  font-weight: 600;
-  color: #0f766e;
-  margin-bottom: 6px;
-}
-
-.logic-task-item {
-  padding: 8px 10px;
-  background: #ecfeff;
-  border-radius: 8px;
-  margin-bottom: 6px;
-  border-left: 3px solid #0f766e;
-}
-
-.logic-task-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: #0f172a;
-  margin-bottom: 2px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.logic-task-tag {
-  font-size: 11px;
-  padding: 1px 6px;
-  border-radius: 999px;
-  background: #dbeafe;
-  color: #1e40af;
-}
-
-.logic-task-target {
-  font-size: 12px;
-  color: #4b5563;
-  margin-bottom: 2px;
-}
-
-.logic-task-exercise {
-  font-size: 12px;
-  color: #111827;
-  margin-bottom: 2px;
-}
-
-.logic-task-example {
-  font-size: 12px;
-  color: #6b7280;
-  font-style: italic;
-}
-
-.logic-task-workspace {
-  margin-top: 8px;
-}
-
-.logic-task-workspace-label {
-  font-size: 12px;
-  font-weight: 500;
-  color: #111827;
-  margin-bottom: 4px;
-}
-
-.logic-task-textarea {
-  width: 100%;
-  min-height: 80px;
-  border-radius: 6px;
-  border: 1px solid #d1d5db;
-  padding: 6px 8px;
-  font-size: 13px;
-  font-family: inherit;
-  resize: vertical;
 }
 
 .clear-logic-btn {

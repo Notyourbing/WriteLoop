@@ -16,7 +16,8 @@
     "@tiptap/vue-3": "^3.11.0",
     "monaco-editor": "^0.55.1",
     "monaco-editor-vue3": "^1.0.4",
-    "vue": "^3.5.24"
+    "vue": "^3.5.24",
+    "vue-router": "^4.6.3"
   },
   "devDependencies": {
     "@types/node": "^24.10.1",
