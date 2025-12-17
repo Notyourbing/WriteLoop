@@ -1,0 +1,224 @@
+{
+  "meta": {
+    "version": "4.5.2-stable",
+    "generated_at": "2025-12-28T14:22:10.552Z",
+    "environment": "production_mirror",
+    "integrity_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  },
+  "user_context": {
+    "session_id": "sess_882910_xkpq_9921",
+    "permissions": ["READ_HISTORY", "WRITE_ESSAY", "EXPORT_REPORT", "ACCESS_BETA_FEATURES"],
+    "preferences": {
+      "theme": "system_default",
+      "notifications": {
+        "email": true,
+        "push": false,
+        "weekly_digest": true
+      },
+      "editor_config": {
+        "auto_save": true,
+        "spell_check_level": "strict",
+        "font_size": 14
+      }
+    }
+  },
+  "essay_archives": [
+    {
+      "id": "doc_20251120_001",
+      "title": "The Impact of Artificial Intelligence on Modern Education",
+      "created_at": "2025-11-20T09:30:00Z",
+      "word_count": 845,
+      "status": "analyzed",
+      "scores": {
+        "overall": 8.5,
+        "vocabulary": 8.2,
+        "coherence": 8.8,
+        "grammar": 9.0
+      },
+      "ai_feedback": {
+        "summary": "Strong arguments presented. The flow of ideas is logical.",
+        "suggestions": [
+          "Consider using more varied transition words in paragraph 3.",
+          "The conclusion could be strengthened by restating the thesis more clearly.",
+          "Check for passive voice usage in the second section."
+        ]
+      },
+      "tags": ["education", "technology", "argumentative"]
+    },
+    {
+      "id": "doc_20251205_042",
+      "title": "Sustainable Urban Planning in 21st Century",
+      "created_at": "2025-12-05T14:15:22Z",
+      "word_count": 1205,
+      "status": "draft",
+      "scores": {
+        "overall": null,
+        "vocabulary": null,
+        "coherence": null,
+        "grammar": null
+      },
+      "ai_feedback": null,
+      "tags": ["urbanism", "environment"]
+    },
+    {
+      "id": "doc_20251215_088",
+      "title": "Analysis of Global Economic Trends Post-2024",
+      "created_at": "2025-12-15T11:00:00Z",
+      "word_count": 650,
+      "status": "analyzed",
+      "scores": {
+        "overall": 7.8,
+        "vocabulary": 8.5,
+        "coherence": 7.0,
+        "grammar": 8.0
+      },
+      "ai_feedback": {
+        "summary": "Good vocabulary usage, but the structure needs work.",
+        "suggestions": [
+          "Paragraph transitions are abrupt.",
+          "Provide more concrete examples to support your economic claims.",
+          "Review the citation format for the statistical data provided."
+        ]
+      },
+      "tags": ["economics", "analysis"]
+    }
+  ],
+  "performance_metrics": {
+    "latency_history_ms": [
+      120, 125, 118, 130, 145, 200, 150, 122, 119, 115, 125, 130, 
+      128, 122, 119, 118, 120, 125, 132, 140, 135, 128, 122, 120,
+      115, 118, 122, 125, 130, 135, 128, 122, 120, 118, 115, 112
+    ],
+    "memory_usage_mb": {
+      "heap_total": 512,
+      "heap_used": 345,
+      "external": 120
+    },
+    "api_calls": {
+      "total": 15420,
+      "success": 15380,
+      "failed": 40,
+      "rate_limited": 0
+    }
+  },
+  "system_logs": [
+    {
+      "timestamp": "2025-12-28T14:20:01Z",
+      "level": "INFO",
+      "module": "AuthService",
+      "message": "Token refreshed successfully for user sess_882910",
+      "trace_id": "tr_1001"
+    },
+    {
+      "timestamp": "2025-12-28T14:20:05Z",
+      "level": "DEBUG",
+      "module": "EditorComponent",
+      "message": "Auto-save triggered. Payload size: 45KB",
+      "trace_id": "tr_1002"
+    },
+    {
+      "timestamp": "2025-12-28T14:20:10Z",
+      "level": "INFO",
+      "module": "Network",
+      "message": "Fetching remote config from CDN...",
+      "trace_id": "tr_1003"
+    },
+    {
+      "timestamp": "2025-12-28T14:20:12Z",
+      "level": "WARN",
+      "module": "Performance",
+      "message": "Long task detected in main thread (55ms)",
+      "trace_id": "tr_1004"
+    },
+    {
+      "timestamp": "2025-12-28T14:20:15Z",
+      "level": "INFO",
+      "module": "AnalysisEngine",
+      "message": "NLP Model loaded into memory buffer.",
+      "trace_id": "tr_1005"
+    },
+    {
+      "timestamp": "2025-12-28T14:20:20Z",
+      "level": "INFO",
+      "module": "WebSocket",
+      "message": "Connection established with wss://api.writeloop.com/stream",
+      "trace_id": "tr_1006"
+    },
+    {
+      "timestamp": "2025-12-28T14:20:25Z",
+      "level": "ERROR",
+      "module": "ImageLoader",
+      "message": "Failed to load avatar resource: 404 Not Found",
+      "trace_id": "tr_1007"
+    },
+    {
+      "timestamp": "2025-12-28T14:20:30Z",
+      "level": "INFO",
+      "module": "Router",
+      "message": "Navigation triggered: /dashboard -> /editor",
+      "trace_id": "tr_1008"
+    },
+    {
+      "timestamp": "2025-12-28T14:20:35Z",
+      "level": "DEBUG",
+      "module": "StateManagement",
+      "message": "State mutation commit: SET_CURRENT_ESSAY",
+      "trace_id": "tr_1009"
+    },
+    {
+      "timestamp": "2025-12-28T14:20:40Z",
+      "level": "INFO",
+      "module": "System",
+      "message": "Garbage collection interval check passed.",
+      "trace_id": "tr_1010"
+    },
+    {
+      "timestamp": "2025-12-28T14:20:45Z",
+      "level": "INFO",
+      "module": "API",
+      "message": "POST /v1/essay/save responded in 204ms",
+      "trace_id": "tr_1011"
+    },
+    {
+      "timestamp": "2025-12-28T14:20:50Z",
+      "level": "INFO",
+      "module": "Analytics",
+      "message": "User engagement event sent: type=click, target=export_btn",
+      "trace_id": "tr_1012"
+    },
+    {
+      "timestamp": "2025-12-28T14:21:00Z",
+      "level": "WARN",
+      "module": "Memory",
+      "message": "Heap usage approaching soft limit (300MB)",
+      "trace_id": "tr_1013"
+    },
+    {
+      "timestamp": "2025-12-28T14:21:05Z",
+      "level": "INFO",
+      "module": "AuthService",
+      "message": "Validating session integrity...",
+      "trace_id": "tr_1014"
+    },
+    {
+      "timestamp": "2025-12-28T14:21:10Z",
+      "level": "SUCCESS",
+      "module": "ExportService",
+      "message": "PDF generation completed. File size: 1.2MB",
+      "trace_id": "tr_1015"
+    }
+  ],
+  "feature_flags": {
+    "new_ui_layout": true,
+    "dark_mode_v2": false,
+    "ai_assistant_chat": true,
+    "realtime_collaboration": false,
+    "advanced_grammar_check": true,
+    "experimental_export": true
+  },
+  "localization": {
+    "language": "en-US",
+    "timezone": "Asia/Shanghai",
+    "currency": "CNY"
+  }
+}
