@@ -84,6 +84,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from "vue";
 import { useRoute, useRouter } from "vue-router";
+import { getApiUrl, config } from '../config';
 
 interface PracticeTask {
   title: string;
@@ -144,7 +145,7 @@ async function generatePracticeTasks() {
   practiceTasks.value = [];
 
   try {
-    const response = await fetch("http://localhost:8001/generate-tasks", {
+    const response = await fetch(getApiUrl(config.api.endpoints.generateTasks), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ text }),
