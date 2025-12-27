@@ -79,7 +79,10 @@
         <div v-if="rewrittenData.explanation" class="rewrite-explain">
           {{ rewrittenData.explanation }}
         </div>
-        <button @click="clearRewrittenSentence" class="clear-rewrite-btn">Clear</button>
+        <div class="rewrite-actions">
+          <button @click="applyRewrittenSentence" class="apply-rewrite-btn">Apply</button>
+          <button @click="clearRewrittenSentence" class="clear-rewrite-btn">Clear</button>
+        </div>
       </div>
 
       <!-- Logic analysis area -->
@@ -151,6 +154,8 @@ import { useRouter } from "vue-router";
 
 import { useFaceLandmarks } from '../composables/useFaceLandmarks';
 import { useActivityMonitor } from '../composables/useActivityMonitor';
+import { getApiUrl, config } from '../config';
+import { useReadingHistory } from '../composables/useReadingHistory';
 
 // 定义组件名称，用于 keep-alive
 defineOptions({
@@ -247,6 +252,9 @@ interface LogicAnalysisResponse {
   profile?: WritingProfile;
 }
 
+// --- Reading history for RAG enhancement ---
+const { getReadingHistory } = useReadingHistory();
+
 // --- Reactive state ---
 const editor = ref<Editor | null>(null);
 const suggestions = ref<Suggestion[]>([]);
@@ -272,10 +280,16 @@ async function sendSuggestionRequest() {
   lastSentText = text;
 
   try {
-    const response = await fetch("http://localhost:8001/suggest", {
+    const readEssayIds = getReadingHistory();
+    
+    const response = await fetch(getApiUrl(config.api.endpoints.suggest), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text, cursor: null }),
+      body: JSON.stringify({ 
+        text, 
+        cursor: null,
+        read_essay_ids: readEssayIds.length > 0 ? readEssayIds : null
+      }),
     });
 
     if (!response.ok) {
@@ -315,16 +329,19 @@ function clearSuggestions() {
 }
 
 // Sentence rewrite feature
+let lastSelectedText = "";
+
 function onTextSelect() {
   const selectedText = window.getSelection()?.toString().trim();
   if (selectedText && selectedText.length > 3) {
+    lastSelectedText = selectedText;
     rewriteSentence(selectedText);
   }
 }
 
 async function rewriteSentence(selectedText: string) {
   try {
-    const response = await fetch("http://localhost:8001/rewrite", {
+    const response = await fetch(getApiUrl(config.api.endpoints.rewrite), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ sentence: selectedText }),
@@ -347,8 +364,64 @@ async function rewriteSentence(selectedText: string) {
   }
 }
 
+function applyRewrittenSentence() {
+  if (!editor.value || !rewrittenData.value) return;
+  
+  // Check if there's a current selection in the editor
+  const { from, to } = editor.value.state.selection;
+  const hasSelection = from !== to;
+  
+  if (hasSelection) {
+    // Replace the currently selected text
+    editor.value
+      .chain()
+      .focus()
+      .deleteSelection()
+      .insertContent(rewrittenData.value.rewritten)
+      .run();
+  } else if (lastSelectedText) {
+    // Try to find and replace the last selected text
+    const editorText = editor.value.getText();
+    const startIndex = editorText.indexOf(lastSelectedText);
+    
+    if (startIndex !== -1) {
+      // Calculate positions in the editor
+      const fromPos = startIndex;
+      const toPos = startIndex + lastSelectedText.length;
+      
+      // Replace using TipTap's transaction
+      editor.value
+        .chain()
+        .focus()
+        .setTextSelection({ from: fromPos, to: toPos })
+        .deleteSelection()
+        .insertContent(rewrittenData.value.rewritten)
+        .run();
+    } else {
+      // If we can't find the exact text, just insert at cursor
+      editor.value
+        .chain()
+        .focus()
+        .insertContent(rewrittenData.value.rewritten + " ")
+        .run();
+    }
+  } else {
+    // Fallback: insert at cursor position
+    editor.value
+      .chain()
+      .focus()
+      .insertContent(rewrittenData.value.rewritten + " ")
+      .run();
+  }
+  
+  // Clear the rewrite panel after applying
+  rewrittenData.value = null;
+  lastSelectedText = "";
+}
+
 function clearRewrittenSentence() {
   rewrittenData.value = null;
+  lastSelectedText = "";
 }
 
 // Logic analysis feature
@@ -365,7 +438,7 @@ async function analyzeLogic() {
   logicAnalysis.value = null;
 
   try {
-    const response = await fetch("http://localhost:8001/analyze-logic", {
+    const response = await fetch(getApiUrl(config.api.endpoints.analyzeLogic), {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ text }),
@@ -610,19 +683,41 @@ onBeforeUnmount(() => {
   line-height: 1.4;
 }
 
-.clear-rewrite-btn {
-  padding: 6px 12px;
-  border-radius: 4px;
-  border: none;
+.rewrite-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.apply-rewrite-btn {
+  padding: 8px 16px;
   background: #4CAF50;
   color: white;
+  border: none;
+  border-radius: 6px;
   cursor: pointer;
-  margin-top: 8px;
-  font-size: 12px;
+  font-size: 14px;
+  font-weight: 500;
+  transition: background 0.2s;
+}
+
+.apply-rewrite-btn:hover {
+  background: #45a049;
+}
+
+.clear-rewrite-btn {
+  padding: 8px 16px;
+  background: #6b7280;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  transition: background 0.2s;
 }
 
 .clear-rewrite-btn:hover {
-  background: #45a049;
+  background: #4b5563;
 }
 
 .analyze-btn {
