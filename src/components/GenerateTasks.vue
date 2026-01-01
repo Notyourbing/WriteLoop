@@ -83,8 +83,10 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from "vue";
-import { useRoute, useRouter } from "vue-router";
+import { useRoute } from "vue-router";
 import { getApiUrl, config } from '../config';
+import { useAuth } from '../composables/useAuth';
+import { useTaskHistory } from '../composables/useTaskHistory';
 
 interface PracticeTask {
   title: string;
@@ -95,7 +97,8 @@ interface PracticeTask {
 }
 
 const route = useRoute();
-const router = useRouter();
+const { getAuthHeaders } = useAuth();
+const { addTaskHistory } = useTaskHistory();
 
 const inputText = ref("");
 const practiceTasks = ref<PracticeTask[]>([]);
@@ -147,7 +150,7 @@ async function generatePracticeTasks() {
   try {
     const response = await fetch(getApiUrl(config.api.endpoints.generateTasks), {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": "application/json", ...getAuthHeaders() },
       body: JSON.stringify({ text }),
     });
 
@@ -161,6 +164,11 @@ async function generatePracticeTasks() {
     if (practiceTasks.value.length > 0) {
       activeTaskIndex.value = 0;
       taskDraft.value = "";
+      addTaskHistory({
+        created_at: new Date().toISOString(),
+        tasks: practiceTasks.value,
+        source_text: text.slice(0, 180),
+      });
     }
   } catch (error) {
     console.error("Error generating practice tasks:", error);
@@ -448,4 +456,3 @@ function clearTasks() {
   background: #45a049;
 }
 </style>
-
