@@ -21,31 +21,46 @@
       <div class="profile-sections">
         <section class="profile-section">
           <div class="section-header">
-            <h3>用户画像雷达图</h3>
+            <h3>用户画像与练习趋势</h3>
           </div>
-          <div v-if="profileData.has_data" class="radar-section">
-            <RadarChart
-              :ttr="profileData.ttr"
-              :mlu="profileData.mlu"
-              :logic-score="profileData.logic_score"
-              :size="300"
-            />
-            <div class="radar-legend">
-              <div class="legend-item">
-                <span class="legend-label">TTR (词汇丰富度):</span>
-                <span class="legend-value">{{ Math.round(profileData.ttr) }}分</span>
+          <div class="profile-charts">
+            <div class="chart-card">
+              <div class="chart-title">用户画像雷达图</div>
+              <div v-if="profileData.has_data" class="radar-section">
+                <RadarChart
+                  :ttr="profileData.ttr"
+                  :mlu="profileData.mlu"
+                  :logic-score="profileData.logic_score"
+                  :size="280"
+                />
+                <div class="radar-legend">
+                  <div class="legend-item">
+                    <span class="legend-label">TTR (词汇丰富度):</span>
+                    <span class="legend-value">{{ Math.round(profileData.ttr) }}分</span>
+                  </div>
+                  <div class="legend-item">
+                    <span class="legend-label">MLU (句法复杂度):</span>
+                    <span class="legend-value">{{ Math.round(profileData.mlu) }}分</span>
+                  </div>
+                  <div class="legend-item">
+                    <span class="legend-label">Logic Score (逻辑连贯性):</span>
+                    <span class="legend-value">{{ Math.round(profileData.logic_score) }}分</span>
+                  </div>
+                </div>
               </div>
-              <div class="legend-item">
-                <span class="legend-label">MLU (句法复杂度):</span>
-                <span class="legend-value">{{ Math.round(profileData.mlu) }}分</span>
-              </div>
-              <div class="legend-item">
-                <span class="legend-label">Logic Score (逻辑连贯性):</span>
-                <span class="legend-value">{{ Math.round(profileData.logic_score) }}分</span>
-              </div>
+              <p v-else class="empty-text">暂无画像数据，完成一次逻辑分析后即可查看</p>
+            </div>
+
+            <div class="chart-card">
+              <div class="chart-title">用户练习趋势</div>
+              <PracticeTrendChart
+                :labels="practiceTrend.labels"
+                :values="practiceTrend.values"
+                :width="320"
+                :height="240"
+              />
             </div>
           </div>
-          <p v-else class="empty-text">暂无画像数据，完成一次逻辑分析后即可查看</p>
         </section>
 
         <section class="profile-section">
@@ -122,6 +137,7 @@ import { useReadingHistory } from '../composables/useReadingHistory';
 import { useTaskHistory, type TaskHistoryItem } from '../composables/useTaskHistory';
 import { getApiUrl, config } from '../config';
 import RadarChart from './RadarChart.vue';
+import PracticeTrendChart from './PracticeTrendChart.vue';
 
 const { user, fetchCurrentUser, getAuthHeaders } = useAuth();
 const { getReadingHistory, clearHistory } = useReadingHistory();
@@ -165,6 +181,21 @@ function formatDate(value: string) {
   }
   return date.toLocaleString();
 }
+
+function formatDateShort(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+  return date.toLocaleDateString();
+}
+
+const practiceTrend = computed(() => {
+  const history = [...taskHistory.value].reverse();
+  const labels = history.map((item) => formatDateShort(item.created_at));
+  const values = history.map((item) => (item.tasks ? item.tasks.length : 0));
+  return { labels, values };
+});
 
 async function loadReadingHistory() {
   if (!readingHistoryIds.value.length) {
@@ -219,7 +250,7 @@ async function loadUserProfile() {
 
 <style scoped>
 .profile-page {
-  height: 100%;
+  min-height: 100vh;
   padding: 32px;
   display: flex;
   justify-content: center;
@@ -235,6 +266,8 @@ async function loadUserProfile() {
   padding: 32px;
   box-shadow: 0 12px 32px rgba(15, 23, 42, 0.12);
   border: 1px solid #e5e7eb;
+  max-height: calc(100vh - 64px);
+  overflow-y: auto;
 }
 
 .profile-header {
@@ -453,6 +486,28 @@ async function loadUserProfile() {
   gap: 8px;
   width: 100%;
   max-width: 400px;
+}
+
+.profile-charts {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+}
+
+.chart-card {
+  background: #ffffff;
+  border-radius: 12px;
+  padding: 16px;
+  border: 1px solid #e5e7eb;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.chart-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #111827;
 }
 
 .legend-item {
