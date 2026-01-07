@@ -11,10 +11,18 @@
           <span class="title">WriteLoop Editor</span>
         </div>
 
-        <button class="analyze-btn" :disabled="isEmpty || isAnalyzing" @click="analyzeLogic">
-          <span v-if="!isAnalyzing">🔍 Analyze Logic</span>
-          <span v-else>Analyzing...</span>
-        </button>
+        <div class="header-actions">
+          <button class="analyze-btn" :disabled="isEmpty || isAnalyzing" @click="analyzeLogic">
+            <span v-if="!isAnalyzing">🔍 Analyze Logic</span>
+            <span v-else>Analyzing...</span>
+          </button>
+
+          <button class="comment-toggle-btn" @click="isCommentBoxVisible = true">
+            💬 Comment
+          </button>
+        </div>  
+
+    
       </div>
 
       <!-- SINGLE hidden video (IMPORTANT: keep only one ref="videoRef") -->
@@ -148,6 +156,11 @@
       <div v-if="isYawning" style="color: yellow; font-weight: bold;">🥱 YAWNING!</div>
     </div>
   </div>
+  <CommentBox
+  :visible="isCommentBoxVisible"
+  @save="handleCommentSave"
+  @cancel="handleCommentCancel"
+/>
 </template>
 
 <script setup lang="ts">
@@ -157,6 +170,7 @@ import StarterKit from "@tiptap/starter-kit";
 import Placeholder from "@tiptap/extension-placeholder";
 import { useRouter } from "vue-router";
 
+import CommentBox from "./CommentBox.vue";
 import { useFaceLandmarks } from "../composables/useFaceLandmarks";
 import { useActivityMonitor } from "../composables/useActivityMonitor";
 import { getApiUrl, config } from "../config";
@@ -261,6 +275,7 @@ const suggestions = ref<Suggestion[]>([]);
 const rewrittenData = ref<RewriteResponse | null>(null);
 const logicAnalysis = ref<LogicAnalysisResponse | null>(null);
 const isAnalyzing = ref(false);
+const isCommentBoxVisible = ref(false);
 
 // --- Debounce control for suggestion requests ---
 let typingTimer: number | undefined;
@@ -564,6 +579,15 @@ async function generatePracticeTasks() {
 
 function clearLogicAnalysis() {
   logicAnalysis.value = null;
+}
+
+function handleCommentSave(text: string) {
+  console.log("comment:", text);
+  isCommentBoxVisible.value = false;
+}
+
+function handleCommentCancel() {
+  isCommentBoxVisible.value = false;
 }
 
 function getScoreClass(score: number): string {
